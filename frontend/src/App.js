@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from "axios";
-import RouteForm from './RouteForm';
+import RouteForm from './components/RouteForm';
+import TrafficGraph from './components/TrafficGraph';
+import './styles/App.css';
 
 const api_Key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
@@ -8,6 +10,9 @@ const App = () => {
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [trafficData, setTrafficData] = useState(null);
+  const [formData, setFormData] = useState(null);
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   
@@ -44,6 +49,7 @@ const App = () => {
   const fetchRoutes = async (formData) => {
     setLoading(true);
     setError(null);
+    setFormData(formData);
     
     try {
       const response = await axios.post('http://localhost:8000/api/routes', {
@@ -60,6 +66,25 @@ const App = () => {
       console.error("Error fetching routes:", err);
       setError("Failed to fetch routes. Please try again later.");
       setLoading(false);
+    }
+  };
+
+  const fetchTrafficData = async (routeIndex) => {
+    if (!formData) return;
+    
+    try {
+      const response = await axios.get(`http://localhost:8000/api/traffic/${routeIndex}`, {
+        params: {
+          origin: formData.origin,
+          destination: formData.destination
+        }
+      });
+      
+      setTrafficData(response.data);
+      setSelectedRoute(routeIndex);
+    } catch (err) {
+      console.error("Error fetching traffic data:", err);
+      setError("Failed to fetch traffic data. Please try again later.");
     }
   };
 
@@ -116,6 +141,10 @@ const App = () => {
         fullscreenControl: true
       });
 
+      // Add traffic layer
+      // const trafficLayer = new window.google.maps.TrafficLayer();
+      // trafficLayer.setMap(mapInstance.current);
+
       // Style routes with different colors
       mapInstance.current.data.setStyle(function(feature) {
         const routeIndex = parseInt(feature.getProperty('name').split(' ')[1]) - 1;
@@ -124,7 +153,8 @@ const App = () => {
         return {
           strokeColor: colors[routeIndex % colors.length],
           strokeWeight: 6,
-          strokeOpacity: 0.8
+          strokeOpacity: 0.8,
+          zIndex: -1  // This will make the routes appear below map text and places
         };
       });
 
@@ -147,10 +177,12 @@ const App = () => {
     // Load Google Maps API
     if (!window.google) {
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${api_Key}&callback=initGoogleMaps`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${api_Key}&libraries=places&v=weekly`;
       script.async = true;
+      script.defer = true;
       
-      window.initGoogleMaps = () => {
+      script.onload = () => {
+        window.initGoogleMaps = initMap;
         initMap();
       };
       
@@ -162,25 +194,42 @@ const App = () => {
   }, []);
 
   return (
-    <div>
+    <div className="app-container">
       <RouteForm onSubmit={fetchRoutes} isLoading={loading} />
       
       {error && (
-        <div style={{
-          position: 'absolute', 
-          top: '10px', 
-          right: '10px', 
-          zIndex: 1000, 
-          background: '#ffdddd', 
-          padding: '10px', 
-          borderRadius: '5px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-        }}>
+        <div className="error-message">
           {error}
         </div>
       )}
       
-      <div ref={mapRef} style={{ height: '100vh', width: '100%' }}></div>
+      <div ref={mapRef} className="map-container"></div>
+      
+      {routes.length > 0 && (
+        <div className="routes-container">
+          <h3>Available Routes</h3>
+          <div className="routes-list">
+            {routes.map((route, index) => (
+              <div 
+                key={index} 
+                className={`route-item ${selectedRoute === index ? 'selected' : ''}`}
+                onClick={() => fetchTrafficData(index)}
+              >
+                <h4>Route {index + 1}</h4>
+                <p>Distance: {route.distance}</p>
+                <p>Duration: {route.duration}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {trafficData && selectedRoute !== null && (
+        <TrafficGraph 
+          routeData={trafficData} 
+          selectedRoute={selectedRoute} 
+        />
+      )}
     </div>
   );
 };
