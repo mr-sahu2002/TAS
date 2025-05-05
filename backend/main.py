@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 import requests
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
+import random
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +33,11 @@ class RouteData(BaseModel):
     polyline: str
     distance: str
     duration: str
+
+class TrafficData(BaseModel):
+    time: str
+    trafficLevel: float
+    duration: int
 
 @app.post("/api/routes", response_model=List[RouteData])
 def get_routes(request: RouteRequest):
@@ -88,6 +95,42 @@ def get_routes(request: RouteRequest):
     
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Error fetching routes: {str(e)}")
+
+@app.get("/api/traffic/{route_index}", response_model=List[TrafficData])
+def get_traffic_data(route_index: int, origin: str, destination: str):
+    try:
+        # Generate traffic data for the next 24 hours in 30-minute intervals
+        traffic_data = []
+        current_time = datetime.now()
+        
+        for i in range(48):  # 24 hours * 2 (30-minute intervals)
+            # Calculate time for this interval
+            interval_time = current_time + timedelta(minutes=i * 30)
+            
+            # Generate traffic level (0-100%)
+            # This is a simplified example - in a real app, you'd use actual traffic data
+            hour = interval_time.hour
+            if 7 <= hour <= 9 or 17 <= hour <= 19:  # Rush hours
+                traffic_level = random.uniform(70, 100)
+            elif 10 <= hour <= 16:  # Midday
+                traffic_level = random.uniform(40, 70)
+            else:  # Night/early morning
+                traffic_level = random.uniform(10, 40)
+            
+            # Calculate duration based on traffic level
+            base_duration = 30  # Base duration in minutes
+            duration = int(base_duration * (1 + (traffic_level / 100)))
+            
+            traffic_data.append({
+                "time": interval_time.strftime("%H:%M"),
+                "trafficLevel": round(traffic_level, 1),
+                "duration": duration
+            })
+        
+        return traffic_data
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating traffic data: {str(e)}")
 
 # For testing purposes
 if __name__ == "__main__":
