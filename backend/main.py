@@ -7,6 +7,7 @@ import requests
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import random
+from news import router as news_router
 
 # Load environment variables
 load_dotenv()
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# Include the news router
+app.include_router(news_router, prefix="/api")
 
 class RouteRequest(BaseModel):
     origin: str

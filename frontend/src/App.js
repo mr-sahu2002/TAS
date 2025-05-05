@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from "axios";
 import RouteForm from './components/RouteForm';
 import TrafficGraph from './components/TrafficGraph';
+import Navbar from './components/Navbar';
+import TrafficNews from './components/TrafficNews';
 import './styles/App.css';
+import { faBus } from "@fortawesome/free-solid-svg-icons";
 
 const api_Key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
@@ -13,6 +16,8 @@ const App = () => {
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [trafficData, setTrafficData] = useState(null);
   const [formData, setFormData] = useState(null);
+  const [activeTab, setActiveTab] = useState('routes');
+  const [isMapInitialized, setIsMapInitialized] = useState(false);
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   
@@ -125,6 +130,40 @@ const App = () => {
       coordinates.forEach(point => {
         bounds.extend(new window.google.maps.LatLng(point[1], point[0]));
       });
+
+      // Add start and end markers
+      const startPoint = coordinates[0];
+      const endPoint = coordinates[coordinates.length - 1];
+
+      // Start marker (green circle)
+      new window.google.maps.Marker({
+        position: { lat: startPoint[1], lng: startPoint[0] },
+        map: mapInstance.current,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: "#4CAF50",
+          fillOpacity: 1,
+          strokeWeight: 2,
+          strokeColor: "#ffffff",
+          scale: 8
+        },
+        title: "Start Point"
+      });
+
+      // End marker (red circle)
+      new window.google.maps.Marker({
+        position: { lat: endPoint[1], lng: endPoint[0] },
+        map: mapInstance.current,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: "#F44336",
+          fillOpacity: 1,
+          strokeWeight: 2,
+          strokeColor: "#ffffff",
+          scale: 8
+        },
+        title: "End Point"
+      });
       
       mapInstance.current.fitBounds(bounds);
     }
@@ -132,46 +171,74 @@ const App = () => {
 
   useEffect(() => {
     const initMap = () => {
-      // Create map instance
-      mapInstance.current = new window.google.maps.Map(mapRef.current, {
-        zoom: 12,
-        center: { lat: 12.9716, lng: 77.5946 }, // Bangalore center
-        mapTypeControl: true,
-        streetViewControl: false,
-        fullscreenControl: true
-      });
+      if (!mapRef.current) return;
 
-      // Add traffic layer
-      // const trafficLayer = new window.google.maps.TrafficLayer();
-      // trafficLayer.setMap(mapInstance.current);
-
-      // Style routes with different colors
-      mapInstance.current.data.setStyle(function(feature) {
-        const routeIndex = parseInt(feature.getProperty('name').split(' ')[1]) - 1;
-        const colors = ['#4285F4', '#DB4437', '#0F9D58']; // Google Map colors: Blue, Red, Green
-        
-        return {
-          strokeColor: colors[routeIndex % colors.length],
-          strokeWeight: 6,
-          strokeOpacity: 0.8,
-          zIndex: -1  // This will make the routes appear below map text and places
-        };
-      });
-
-      // Add click listener for routes
-      mapInstance.current.data.addListener("click", function (event) {
-        const name = event.feature.getProperty("name");
-        const distance = event.feature.getProperty("distance");
-        const duration = event.feature.getProperty("duration");
-        
-        // Create info window at clicked location
-        const infoWindow = new window.google.maps.InfoWindow({
-          content: `<div><strong>${name}</strong><br>Distance: ${distance}<br>Duration: ${duration}</div>`,
-          position: event.latLng
+      try {
+        // Create map instance
+        mapInstance.current = new window.google.maps.Map(mapRef.current, {
+          zoom: 12,
+          center: { lat: 12.9716, lng: 77.5946 }, // Bangalore center
+          mapTypeControl: true,
+          streetViewControl: false,
+          fullscreenControl: true
         });
-        
-        infoWindow.open(mapInstance.current);
-      });
+
+        // Add traffic congestion point markers
+        const congestionPoints = [
+          { lat: 12.9716, lng: 77.5946, title: "MG Road Junction" },
+          { lat: 12.9784, lng: 77.6408, title: "Indiranagar Junction" },
+          { lat: 12.9784, lng: 77.6408, title: "Koramangala Junction" },
+          { lat: 12.9784, lng: 77.6408, title: "Silk Board Junction" },
+          { lat: 12.9784, lng: 77.6408, title: "Marathahalli Junction" }
+        ];
+
+        congestionPoints.forEach(point => {
+          new window.google.maps.Marker({
+            position: { lat: point.lat, lng: point.lng },
+            map: mapInstance.current,
+            title: point.title,
+            label: {
+              text: "!",
+              color: "#ffffff",
+              fontSize: "14px",
+              fontWeight: "bold"
+            }
+          });
+        });
+
+        // Style routes with different colors
+        mapInstance.current.data.setStyle(function(feature) {
+          const routeIndex = parseInt(feature.getProperty('name').split(' ')[1]) - 1;
+          const colors = ['#4285F4', '#DB4437', '#0F9D58']; // Google Map colors: Blue, Red, Green
+          
+          return {
+            strokeColor: colors[routeIndex % colors.length],
+            strokeWeight: 6,
+            strokeOpacity: 0.8,
+            zIndex: -1
+          };
+        });
+
+        // Add click listener for routes
+        mapInstance.current.data.addListener("click", function (event) {
+          const name = event.feature.getProperty("name");
+          const distance = event.feature.getProperty("distance");
+          const duration = event.feature.getProperty("duration");
+          
+          // Create info window at clicked location
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `<div><strong>${name}</strong><br>Distance: ${distance}<br>Duration: ${duration}</div>`,
+            position: event.latLng
+          });
+          
+          infoWindow.open(mapInstance.current);
+        });
+
+        setIsMapInitialized(true);
+      } catch (error) {
+        console.error('Error initializing map:', error);
+        setError('Failed to initialize map. Please refresh the page.');
+      }
     };
 
     // Load Google Maps API
@@ -191,44 +258,74 @@ const App = () => {
       initMap();
     }
     
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current = null;
+      }
+    };
   }, []);
+
+  // Handle tab changes
+  useEffect(() => {
+    if (!isMapInitialized || !mapRef.current || !mapInstance.current) return;
+
+    if (activeTab === 'routes') {
+      mapRef.current.style.display = 'block';
+      // Trigger resize to ensure map renders properly
+      setTimeout(() => {
+        if (mapInstance.current) {
+          window.google.maps.event.trigger(mapInstance.current, 'resize');
+        }
+      }, 100);
+    } else {
+      mapRef.current.style.display = 'none';
+    }
+  }, [activeTab, isMapInitialized]);
 
   return (
     <div className="app-container">
-      <RouteForm onSubmit={fetchRoutes} isLoading={loading} />
+      <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
       
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
-      
-      <div ref={mapRef} className="map-container"></div>
-      
-      {routes.length > 0 && (
-        <div className="routes-container">
-          <h3>Available Routes</h3>
-          <div className="routes-list">
-            {routes.map((route, index) => (
-              <div 
-                key={index} 
-                className={`route-item ${selectedRoute === index ? 'selected' : ''}`}
-                onClick={() => fetchTrafficData(index)}
-              >
-                <h4>Route {index + 1}</h4>
-                <p>Distance: {route.distance}</p>
-                <p>Duration: {route.duration}</p>
+      {activeTab === 'routes' ? (
+        <>
+          <RouteForm onSubmit={fetchRoutes} isLoading={loading} />
+          
+          {error && (
+            <div className="error-message">
+              {error}
+            </div>
+          )}
+          
+          <div ref={mapRef} className="map-container" style={{ display: activeTab === 'routes' ? 'block' : 'none' }}></div>
+          
+          {routes.length > 0 && (
+            <div className="routes-container">
+              <h3>Available Routes</h3>
+              <div className="routes-list">
+                {routes.map((route, index) => (
+                  <div 
+                    key={index} 
+                    className={`route-item ${selectedRoute === index ? 'selected' : ''}`}
+                    onClick={() => fetchTrafficData(index)}
+                  >
+                    <h4>Route {index + 1}</h4>
+                    <p>Distance: {route.distance}</p>
+                    <p>Duration: {route.duration}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {trafficData && selectedRoute !== null && (
-        <TrafficGraph 
-          routeData={trafficData} 
-          selectedRoute={selectedRoute} 
-        />
+            </div>
+          )}
+          
+          {trafficData && selectedRoute !== null && (
+            <TrafficGraph 
+              routeData={trafficData} 
+              selectedRoute={selectedRoute} 
+            />
+          )}
+        </>
+      ) : (
+        <TrafficNews />
       )}
     </div>
   );
